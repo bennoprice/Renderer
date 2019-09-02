@@ -20,4 +20,4 @@ renderer->draw_circle({ 75.f, 250.f }, 25.f, { 0.f, 0.f, 1.f, 1.f });
 renderer->end();
 ```
 
-![example](https://i.gyazo.com/41d82bf5aebc0c6375cdfb7c548c078f.png)
+![example](https://i.gyazo.com/8ca850b043462dd044657da58ddc5830.png)
