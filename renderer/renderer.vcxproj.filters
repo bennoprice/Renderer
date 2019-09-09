@@ -21,12 +21,21 @@
     <ClCompile Include="renderer.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="memory_manager.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="mini_crt.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="renderer.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="shaders.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="memory_manager.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

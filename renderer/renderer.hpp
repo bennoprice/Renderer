@@ -1,10 +1,11 @@
 #pragma once
-#include <d3d11.h>
 #include <vector>
+#include <d3d11.h>
+#include "memory_manager.hpp"
 
 namespace rendering
 {
-	constexpr auto max_vertices = 0x3000;
+	constexpr auto max_vertices = 1000;
 	template<typename T> constexpr T pi = 3.14159265359;
 
 	struct colour
@@ -30,7 +31,7 @@ namespace rendering
 
 	struct batch
 	{
-		batch(std::size_t count, D3D11_PRIMITIVE_TOPOLOGY topology)
+		explicit batch(std::size_t count, D3D11_PRIMITIVE_TOPOLOGY topology)
 			: count(count)
 			, topology(topology)
 		{ }
@@ -46,6 +47,8 @@ namespace rendering
 		explicit renderer(IDXGISwapChain* swapchain);
 		explicit renderer(ID3D11Device* device, ID3D11DeviceContext* device_context);
 		~renderer() noexcept;
+
+		void* operator new(std::size_t size);
 
 		void begin() const;
 		void draw();
@@ -65,14 +68,14 @@ namespace rendering
 				draw();
 
 			_vertices.resize(_vertices.size() + N);
-			std::memcpy(&_vertices[_vertices.size() - N], vertices.data(), N * sizeof(vertex));
+			memcpy(&_vertices[_vertices.size() - N], vertices.data(), N * sizeof(vertex));
 
 			_batches.emplace_back(N, topology);
 		}
 
 		void draw_filled_box(vec2 pos, vec2 dimensions, colour colour);
 		void draw_box(vec2 pos, vec2 dimensions, colour colour);
-		void draw_circle(vec2 pos, float radius, colour colour);
+		//void draw_circle(vec2 pos, float radius, colour colour);
 		void draw_line(vec2 start, vec2 end, colour colour);
 	private:
 		ID3D11Device* get_device(IDXGISwapChain* swapchain) const;
@@ -86,7 +89,7 @@ namespace rendering
 		ID3D11Buffer* _vertex_buffer;
 		D3D11_VIEWPORT _viewport;
 
-		std::vector<vertex> _vertices;
-		std::vector<batch> _batches;
+		std::vector<vertex, memory::allocator<vertex>> _vertices;
+		std::vector<batch, memory::allocator<batch>> _batches;
 	};
 }

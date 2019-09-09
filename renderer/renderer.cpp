@@ -1,9 +1,7 @@
 #include <array>
-#include <d3dcompiler.h>
 #include "renderer.hpp"
 #include "shaders.hpp"
 #pragma comment (lib, "d3d11.lib")
-#pragma comment (lib, "d3dcompiler.lib")
 
 namespace rendering
 {
@@ -19,26 +17,17 @@ namespace rendering
 		: _device(device)
 		, _device_context(device_context)
 	{
-		// compile and create shaders
-		ID3D10Blob* vs_blob, * ps_blob;
-		D3DCompile(shader, std::size(shader), nullptr, nullptr, nullptr, "VS", "vs_4_0", 0u, 0u, &vs_blob, nullptr);
-		D3DCompile(shader, std::size(shader), nullptr, nullptr, nullptr, "PS", "ps_4_0", 0u, 0u, &ps_blob, nullptr);
-
-		_device->CreateVertexShader(vs_blob->GetBufferPointer(), vs_blob->GetBufferSize(), nullptr, &_vertex_shader);
-		_device->CreatePixelShader(ps_blob->GetBufferPointer(), ps_blob->GetBufferSize(), nullptr, &_pixel_shader);
+		// create shaders
+		_device->CreateVertexShader(shader::vertex, sizeof(shader::vertex), nullptr, &_vertex_shader);
+		_device->CreatePixelShader(shader::pixel, sizeof(shader::pixel), nullptr, &_pixel_shader);
 
 		// create input layout
 		std::array<D3D11_INPUT_ELEMENT_DESC, 2> ied
-		{ {
+		{{
 			{"POSITION", 0u, DXGI_FORMAT_R32G32_FLOAT, 0u, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0u},
 			{"COLOUR", 0u, DXGI_FORMAT_R32G32B32A32_FLOAT, 0u, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0u}
-		} };
-
-		_device->CreateInputLayout(ied.data(), ied.size(), vs_blob->GetBufferPointer(), vs_blob->GetBufferSize(), &_input_layout);
-
-		// release shaders
-		vs_blob->Release();
-		ps_blob->Release();
+		}};
+		_device->CreateInputLayout(ied.data(), ied.size(), shader::vertex, sizeof(shader::vertex), &_input_layout);
 
 		// create vertex buffer
 		D3D11_BUFFER_DESC bd = { };
@@ -49,7 +38,7 @@ namespace rendering
 		_device->CreateBuffer(&bd, nullptr, &_vertex_buffer);
 
 		// get viewport
-		UINT viewport_num = 1;
+		UINT viewport_num = 1u;
 		_device_context->RSGetViewports(&viewport_num, &_viewport);
 	}
 
@@ -61,11 +50,15 @@ namespace rendering
 		_vertex_buffer->Release();
 	}
 
+	void* renderer::operator new(std::size_t size)
+	{
+		return memory::alloc(size);
+	}
+
 	ID3D11Device* renderer::get_device(IDXGISwapChain* swapchain) const
 	{
 		ID3D11Device* device;
 		swapchain->GetDevice(__uuidof(ID3D11Device), reinterpret_cast<void**>(&device));
-		swapchain->GetDevice(__uuidof(device), reinterpret_cast<void**>(&device));
 		return device;
 	}
 
@@ -104,7 +97,7 @@ namespace rendering
 		// copy vertices to vram
 		D3D11_MAPPED_SUBRESOURCE ms;
 		_device_context->Map(_vertex_buffer, 0u, D3D11_MAP_WRITE_DISCARD, 0u, &ms);
-		std::memcpy(ms.pData, _vertices.data(), _vertices.size() * sizeof(vertex));
+		memcpy(ms.pData, _vertices.data(), _vertices.size() * sizeof(vertex));
 		_device_context->Unmap(_vertex_buffer, 0u);
 
 		// draw batches
@@ -125,34 +118,39 @@ namespace rendering
 	void renderer::draw_filled_box(vec2 pos, vec2 dimensions, colour colour)
 	{
 		add_vertices<4>(
-			{ {
-				{ pos.x, pos.y, colour },
-				{ pos.x, pos.y + dimensions.y, colour },
-				{ pos.x + dimensions.x, pos.y, colour },
-				{ pos.x + dimensions.x, pos.y + dimensions.y, colour },
-			} },
-			D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
+		{{
+			{ pos.x, pos.y, colour },
+			{ pos.x, pos.y + dimensions.y, colour },
+			{ pos.x + dimensions.x, pos.y, colour },
+			{ pos.x + dimensions.x, pos.y + dimensions.y, colour },
+		}},
+		D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
 	}
 
 	void renderer::draw_line(vec2 start, vec2 end, colour colour)
 	{
 		add_vertices<2>(
-			{ {
-				{ start.x, start.y, colour },
-				{ end.x, end.y, colour },
-			} },
-			D3D11_PRIMITIVE_TOPOLOGY_LINELIST);
+		{{
+			{ start.x, start.y, colour },
+			{ end.x, end.y, colour },
+		}},
+		D3D11_PRIMITIVE_TOPOLOGY_LINELIST);
 	}
 
 	void renderer::draw_box(vec2 pos, vec2 dimensions, colour colour)
 	{
-		draw_line(pos, { pos.x, pos.y + dimensions.y }, colour);
-		draw_line(pos, { pos.x + dimensions.x, pos.y }, colour);
-		draw_line({ pos.x, pos.y + dimensions.y }, pos + dimensions, colour);
-		draw_line({ pos.x + dimensions.x, pos.y }, pos + dimensions, colour);
+		add_vertices<5>(
+		{{
+			{ pos, colour },
+			{ pos.x, pos.y + dimensions.y, colour},
+			{ pos + dimensions, colour},
+			{ pos.x + dimensions.x, pos.y, colour},
+			{ pos, colour }
+		}},
+		D3D11_PRIMITIVE_TOPOLOGY_LINESTRIP);
 	}
 
-	void renderer::draw_circle(vec2 pos, float radius, colour colour)
+	/*void renderer::draw_circle(vec2 pos, float radius, colour colour)
 	{
 		constexpr auto segments = 256u;
 
@@ -163,5 +161,5 @@ namespace rendering
 			vertices[i] = { pos.x + radius * std::cos(theta), pos.y + radius * std::sin(theta), colour };
 		}
 		add_vertices(vertices, D3D11_PRIMITIVE_TOPOLOGY_LINESTRIP);
-	}
+	}*/
 }
