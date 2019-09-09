@@ -2,6 +2,8 @@
  an importless, fast, and lightweight d3d11 renderer.
 - no imports
 - primitive batching
+- crt reimplemented functions
+- custom static heap memory manager
 - precompiled shaders (removes need for d3dcompile)
 - simple interface
 - simple shader
