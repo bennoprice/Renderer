@@ -1,16 +1,15 @@
-#include <array>
 #include "renderer.hpp"
 #include "shaders.hpp"
 #pragma comment (lib, "d3d11.lib")
 
 namespace rendering
 {
-	renderer::renderer(ID3D11Device* device)
-		: renderer(device, get_device_context(device))
-	{ }
-
 	renderer::renderer(IDXGISwapChain* swapchain)
 		: renderer(get_device(swapchain))
+	{ }
+
+	renderer::renderer(ID3D11Device* device)
+		: renderer(device, get_device_context(device))
 	{ }
 
 	renderer::renderer(ID3D11Device* device, ID3D11DeviceContext* device_context)
@@ -30,16 +29,44 @@ namespace rendering
 		_device->CreateInputLayout(ied.data(), ied.size(), shader::vertex, sizeof(shader::vertex), &_input_layout);
 
 		// create vertex buffer
-		D3D11_BUFFER_DESC bd = { };
-		bd.Usage = D3D11_USAGE_DYNAMIC;
-		bd.ByteWidth = max_vertices * sizeof(vertex);
-		bd.BindFlags = D3D11_BIND_VERTEX_BUFFER;
-		bd.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
-		_device->CreateBuffer(&bd, nullptr, &_vertex_buffer);
+		D3D11_BUFFER_DESC buffer_desc = { };
+		buffer_desc.Usage = D3D11_USAGE_DYNAMIC;
+		buffer_desc.ByteWidth = max_vertices * sizeof(vertex);
+		buffer_desc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+		buffer_desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+		_device->CreateBuffer(&buffer_desc, nullptr, &_vertex_buffer);
 
-		// get viewport
-		UINT viewport_num = 1u;
-		_device_context->RSGetViewports(&viewport_num, &_viewport);
+		// create screen projection buffer
+		D3D11_BUFFER_DESC projection_buffer_desc;
+		projection_buffer_desc.ByteWidth = sizeof(matrix4x4);
+		projection_buffer_desc.Usage = D3D11_USAGE_DYNAMIC;
+		projection_buffer_desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+		projection_buffer_desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+		projection_buffer_desc.MiscFlags = 0;
+		_device->CreateBuffer(&projection_buffer_desc, nullptr, &_projection_buffer);
+
+		// map projection matrix into constant vram buffer
+		D3D11_VIEWPORT viewport;
+		UINT viewport_num = 1;
+		_device_context->RSGetViewports(&viewport_num, &viewport);
+
+		float L = viewport.TopLeftX;
+		float R = viewport.TopLeftX + viewport.Width;
+		float T = viewport.TopLeftY;
+		float B = viewport.TopLeftY + viewport.Height;
+
+		matrix4x4 matrix
+        {{
+            { 2.0f/(R-L),   0.0f,           0.0f,       0.0f },
+            { 0.0f,         2.0f/(T-B),     0.0f,       0.0f },
+            { 0.0f,         0.0f,           0.5f,       0.0f },
+            { (R+L)/(L-R),  (T+B)/(B-T),    0.5f,       1.0f },
+        }};
+
+		D3D11_MAPPED_SUBRESOURCE ms;
+		_device_context->Map(_projection_buffer, 0u, D3D11_MAP_WRITE_DISCARD, 0u, &ms);
+		std::memcpy(ms.pData, matrix.data(), sizeof(matrix));
+		_device_context->Unmap(_projection_buffer, 0u);
 	}
 
 	renderer::~renderer() noexcept
@@ -69,24 +96,33 @@ namespace rendering
 		return context;
 	}
 
-	void renderer::begin() const
+	void renderer::begin()
 	{
+		// backup render state
+		_state_saver.backup(_device_context);
+
 		// set shaders
 		_device_context->VSSetShader(_vertex_shader, nullptr, 0u);
 		_device_context->PSSetShader(_pixel_shader, nullptr, 0u);
 
-		// set input layout
-		_device_context->IASetInputLayout(_input_layout);
+		// set projection buffer
+		_device_context->VSSetConstantBuffers(0u, 1u, &_projection_buffer);
 
 		// set vertex buffer
 		UINT stride = sizeof(vertex);
 		UINT offset = 0u;
 		_device_context->IASetVertexBuffers(0u, 1u, &_vertex_buffer, &stride, &offset);
+
+		// set input layout
+		_device_context->IASetInputLayout(_input_layout);
 	}
 
 	void renderer::end()
 	{
 		draw();
+
+		// restore render state
+		_state_saver.restore();
 	}
 
 	void renderer::draw()
@@ -119,10 +155,10 @@ namespace rendering
 	{
 		add_vertices<4>(
 		{{
-			{ pos.x, pos.y, colour },
-			{ pos.x, pos.y + dimensions.y, colour },
+			{ pos, colour },
 			{ pos.x + dimensions.x, pos.y, colour },
-			{ pos.x + dimensions.x, pos.y + dimensions.y, colour },
+			{ pos.x, pos.y + dimensions.y, colour },
+			{ pos + dimensions, colour },
 		}},
 		D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
 	}
@@ -131,8 +167,8 @@ namespace rendering
 	{
 		add_vertices<2>(
 		{{
-			{ start.x, start.y, colour },
-			{ end.x, end.y, colour },
+			{ start, colour },
+			{ end, colour }
 		}},
 		D3D11_PRIMITIVE_TOPOLOGY_LINELIST);
 	}
@@ -162,4 +198,32 @@ namespace rendering
 		}
 		add_vertices(vertices, D3D11_PRIMITIVE_TOPOLOGY_LINESTRIP);
 	}*/
+
+	void state_saver::backup(ID3D11DeviceContext* device_context)
+	{
+		_device_context = device_context;
+
+		_device_context->IAGetPrimitiveTopology(&_primitive_topology);
+		_device_context->VSGetShader(&_vertex_shader.shader, _vertex_shader.instances, &_vertex_shader.instance_count);
+		_device_context->PSGetShader(&_pixel_shader.shader, _pixel_shader.instances, &_pixel_shader.instance_count);
+		_device_context->VSGetConstantBuffers(0u, 1u, &_constant_buffer);
+		_device_context->IAGetVertexBuffers(0u, 1u, &_vertex_buffer.buffer, &_vertex_buffer.stride, &_vertex_buffer.offset);
+		_device_context->IAGetInputLayout(&_input_layout);
+	}
+	
+	void state_saver::restore()
+	{
+		_device_context->IASetPrimitiveTopology(_primitive_topology);
+		_device_context->VSSetShader(_vertex_shader.shader, _vertex_shader.instances, _vertex_shader.instance_count);
+		_device_context->PSSetShader(_pixel_shader.shader, _pixel_shader.instances, _pixel_shader.instance_count);
+		_device_context->VSSetConstantBuffers(0u, 1u, &_constant_buffer);
+		_device_context->IASetVertexBuffers(0u, 1u, &_vertex_buffer.buffer, &_vertex_buffer.stride, &_vertex_buffer.offset);
+		_device_context->IASetInputLayout(_input_layout);
+
+		if (_vertex_shader.shader) _vertex_shader.shader->Release();
+		if (_pixel_shader.shader) _pixel_shader.shader->Release();
+		if (_constant_buffer) _constant_buffer->Release();
+		if (_vertex_buffer.buffer) _vertex_buffer.buffer->Release();
+		if (_input_layout) _input_layout->Release();
+	}
 }

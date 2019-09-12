@@ -1,4 +1,5 @@
 #pragma once
+#include <array>
 #include <vector>
 #include <d3d11.h>
 #include "memory_manager.hpp"
@@ -7,6 +8,8 @@ namespace rendering
 {
 	constexpr auto max_vertices = 1000;
 	template<typename T> constexpr T pi = 3.14159265359;
+
+	using matrix4x4 = std::array<std::array<float, 4>, 4>;
 
 	struct colour
 	{
@@ -40,6 +43,36 @@ namespace rendering
 		D3D11_PRIMITIVE_TOPOLOGY topology;
 	};
 
+	class state_saver
+	{
+	public:
+		void backup(ID3D11DeviceContext* device_context);
+		void restore();
+	private:
+		template<typename T>
+		struct shader
+		{
+			T* shader;
+			ID3D11ClassInstance* instances[256];
+			UINT instance_count;
+		};
+
+		struct vertex_buffer
+		{
+			ID3D11Buffer* buffer;
+			UINT stride;
+			UINT offset;
+		};
+
+		ID3D11DeviceContext* _device_context;
+		D3D11_PRIMITIVE_TOPOLOGY _primitive_topology;
+		shader<ID3D11VertexShader> _vertex_shader;
+		shader<ID3D11PixelShader> _pixel_shader;
+		ID3D11InputLayout* _input_layout;
+		ID3D11Buffer* _constant_buffer;
+		vertex_buffer _vertex_buffer;
+	};
+
 	class renderer
 	{
 	public:
@@ -50,20 +83,13 @@ namespace rendering
 
 		void* operator new(std::size_t size);
 
-		void begin() const;
+		void begin();
 		void draw();
 		void end();
 
 		template<std::size_t N>
 		void add_vertices(std::array<vertex, N> vertices, D3D11_PRIMITIVE_TOPOLOGY topology)
 		{
-			// translate pixel coords to standard coords
-			for (auto& vertex : vertices)
-			{
-				vertex.pos.x = (vertex.pos.x / (_viewport.Width / 2.f)) - 1.f;
-				vertex.pos.y = (vertex.pos.y / (_viewport.Height / 2.f)) - 1.f;
-			}
-
 			if (_vertices.size() + N > max_vertices)
 				draw();
 
@@ -81,13 +107,15 @@ namespace rendering
 		ID3D11Device* get_device(IDXGISwapChain* swapchain) const;
 		ID3D11DeviceContext* get_device_context(ID3D11Device* device) const;
 
+		state_saver _state_saver;
+
 		ID3D11Device* _device;
 		ID3D11DeviceContext* _device_context;
 		ID3D11VertexShader* _vertex_shader;
 		ID3D11PixelShader* _pixel_shader;
 		ID3D11InputLayout* _input_layout;
+		ID3D11Buffer* _projection_buffer;
 		ID3D11Buffer* _vertex_buffer;
-		D3D11_VIEWPORT _viewport;
 
 		std::vector<vertex, memory::allocator<vertex>> _vertices;
 		std::vector<batch, memory::allocator<batch>> _batches;
