@@ -76,9 +76,9 @@ namespace rendering
 	class renderer
 	{
 	public:
-		explicit renderer(ID3D11Device* device);
 		explicit renderer(IDXGISwapChain* swapchain);
-		explicit renderer(ID3D11Device* device, ID3D11DeviceContext* device_context);
+		explicit renderer(IDXGISwapChain* swapchain, ID3D11Device* device);
+		explicit renderer(IDXGISwapChain* swapchain, ID3D11Device* device, ID3D11DeviceContext* device_context);
 		~renderer() noexcept;
 
 		void* operator new(std::size_t size);
@@ -108,8 +108,7 @@ namespace rendering
 		ID3D11DeviceContext* get_device_context(ID3D11Device* device) const;
 
 		state_saver _state_saver;
-
-		ID3D11Device* _device;
+		ID3D11RenderTargetView* _backbuffer_view;
 		ID3D11DeviceContext* _device_context;
 		ID3D11VertexShader* _vertex_shader;
 		ID3D11PixelShader* _pixel_shader;

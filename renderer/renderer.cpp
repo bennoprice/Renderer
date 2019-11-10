@@ -5,20 +5,19 @@
 namespace rendering
 {
 	renderer::renderer(IDXGISwapChain* swapchain)
-		: renderer(get_device(swapchain))
+		: renderer(swapchain, get_device(swapchain))
 	{ }
 
-	renderer::renderer(ID3D11Device* device)
-		: renderer(device, get_device_context(device))
+	renderer::renderer(IDXGISwapChain* swapchain, ID3D11Device* device)
+		: renderer(swapchain, device, get_device_context(device))
 	{ }
 
-	renderer::renderer(ID3D11Device* device, ID3D11DeviceContext* device_context)
-		: _device(device)
-		, _device_context(device_context)
+	renderer::renderer(IDXGISwapChain* swapchain, ID3D11Device* device, ID3D11DeviceContext* device_context)
+		: _device_context(device_context)
 	{
 		// create shaders
-		_device->CreateVertexShader(shader::vertex, sizeof(shader::vertex), nullptr, &_vertex_shader);
-		_device->CreatePixelShader(shader::pixel, sizeof(shader::pixel), nullptr, &_pixel_shader);
+		device->CreateVertexShader(shader::vertex, sizeof(shader::vertex), nullptr, &_vertex_shader);
+		device->CreatePixelShader(shader::pixel, sizeof(shader::pixel), nullptr, &_pixel_shader);
 
 		// create input layout
 		std::array<D3D11_INPUT_ELEMENT_DESC, 2> ied
@@ -26,7 +25,7 @@ namespace rendering
 			{"POSITION", 0u, DXGI_FORMAT_R32G32_FLOAT, 0u, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0u},
 			{"COLOUR", 0u, DXGI_FORMAT_R32G32B32A32_FLOAT, 0u, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0u}
 		}};
-		_device->CreateInputLayout(ied.data(), ied.size(), shader::vertex, sizeof(shader::vertex), &_input_layout);
+		device->CreateInputLayout(ied.data(), ied.size(), shader::vertex, sizeof(shader::vertex), &_input_layout);
 
 		// create vertex buffer
 		D3D11_BUFFER_DESC buffer_desc = { };
@@ -34,7 +33,13 @@ namespace rendering
 		buffer_desc.ByteWidth = max_vertices * sizeof(vertex);
 		buffer_desc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
 		buffer_desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
-		_device->CreateBuffer(&buffer_desc, nullptr, &_vertex_buffer);
+		device->CreateBuffer(&buffer_desc, nullptr, &_vertex_buffer);
+
+		// create backbuffer view
+		ID3D11Texture2D* backbuffer;
+		swapchain->GetBuffer(0, __uuidof(ID3D11Texture2D), reinterpret_cast<void**>(&backbuffer));
+		device->CreateRenderTargetView(backbuffer, nullptr, &_backbuffer_view);
+		backbuffer->Release();
 
 		// create screen projection buffer
 		D3D11_BUFFER_DESC projection_buffer_desc;
@@ -43,7 +48,7 @@ namespace rendering
 		projection_buffer_desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
 		projection_buffer_desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
 		projection_buffer_desc.MiscFlags = 0;
-		_device->CreateBuffer(&projection_buffer_desc, nullptr, &_projection_buffer);
+		device->CreateBuffer(&projection_buffer_desc, nullptr, &_projection_buffer);
 
 		// map projection matrix into constant vram buffer
 		D3D11_VIEWPORT viewport;
