@@ -118,6 +118,9 @@ namespace rendering
 		UINT offset = 0u;
 		_device_context->IASetVertexBuffers(0u, 1u, &_vertex_buffer, &stride, &offset);
 
+		// set render target
+		_device_context->OMSetRenderTargets(1, &_backbuffer_view, nullptr);
+
 		// set input layout
 		_device_context->IASetInputLayout(_input_layout);
 	}
